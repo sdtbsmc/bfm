@@ -1,34 +1,25 @@
 #!/bin/bash
 
-SERVICE_NAME=bfm
-PATH_TO_JAR=/etc/bfm/bfmwatcher/bfm-app.jar
-PATH_TO_APP_PROP=/etc/bfm/bfmwatcher/application.properties
-PATH_TO_LOG_ROTATE=/etc/logrotate.conf
-PATH_TO_LOGD=/etc/logrotate.d/bfmlog
-PID_FILE=/var/run/bfm.pid
-LOG_FILE=/etc/bfm/bfmwatcher/bfm.log
+SERVICE_NAME="bfm"
+HOME_DIR="/etc/bfm/bfmwatcher"
+PATH_TO_JAR="$HOME_DIR/bfm-app.jar"
+PATH_TO_APP_PROP="$HOME_DIR/application.properties"
+PID_FILE="$HOME_DIR/bfm.pid"
+LOG_FILE="$HOME_DIR/bfm.log"
 
 is_running() {
-
-    [ -f "$PID_FILE" ] || return 1
-
-    PID=$(cat "$PID_FILE")
-
-    [ -d "/proc/$PID" ] || {
+    if [ -f "$PID_FILE" ]; then
+        local pid
+        pid=$(cat "$PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            # PID yaşıyor, çalıştırılan komutta jar dosyasının geçip geçmediğini kontrol et
+            if grep -q "$PATH_TO_JAR" "/proc/$pid/cmdline" 2>/dev/null; then
+                return 0
+            fi
+        fi
+        # Bayat (Stale) PID dosyası temizliği
         rm -f "$PID_FILE"
-        return 1
-    }
-
-    CMD=$(tr '\0' ' ' < "/proc/$PID/cmdline" 2>/dev/null)
-
-    echo "$CMD" | grep -q "$PATH_TO_JAR"
-
-    if [ $? -eq 0 ]; then
-        return 0
     fi
-
-    echo "Stale PID file found: $PID"
-    rm -f "$PID_FILE"
     return 1
 }
 
@@ -40,25 +31,33 @@ start() {
         return 0
     fi
 
+    # Dosya kontrolleri
+    if [ ! -f "$PATH_TO_JAR" ]; then
+        echo "Error: JAR file not found at $PATH_TO_JAR"
+        return 1
+    fi
+
     nohup java \
         -Dspring.config.location="$PATH_TO_APP_PROP" \
         -jar "$PATH_TO_JAR" \
-        >> "$LOG_FILE" 2>&1 &
+        > /dev/null 2>&1 &
 
-    PID=$!
-    echo "$PID" > "$PID_FILE"
+    # nohup java \
+    #     -Dspring.config.location="$PATH_TO_APP_PROP" \
+    #     -jar "$PATH_TO_JAR" \
+    #     >> "$LOG_FILE" 2>&1 &
+
+    local pid=$!
+    echo "$pid" > "$PID_FILE"
 
     sleep 2
 
-    if kill -0 "$PID" 2>/dev/null; then
-        logrotate -s /etc/bfm/bfmwatcher/logrotate.state $PATH_TO_LOG_ROTATE
-        logrotate -s /etc/bfm/bfmwatcher/logrotate.state -f $PATH_TO_LOGD
-
-        echo "$SERVICE_NAME started on PID $PID"
+    if kill -0 "$pid" 2>/dev/null; then
+        echo "$SERVICE_NAME started on PID $pid"
         return 0
     else
         rm -f "$PID_FILE"
-        echo "$SERVICE_NAME could not start"
+        echo "Error: $SERVICE_NAME could not start. Check $LOG_FILE for details."
         return 1
     fi
 }
@@ -66,30 +65,30 @@ start() {
 stop() {
     if ! is_running; then
         echo "$SERVICE_NAME is not running"
+        rm -f "$PID_FILE" 2>/dev/null
         return 0
     fi
 
-    PID=$(cat "$PID_FILE")
+    local pid
+    pid=$(cat "$PID_FILE")
 
-    echo "Stopping $SERVICE_NAME (PID=$PID)..."
+    echo "Stopping $SERVICE_NAME (PID=$pid)..."
+    kill "$pid" 2>/dev/null
 
-    kill "$PID"
-
-    for i in {1..30}
-    do
-        if ! kill -0 "$PID" 2>/dev/null; then
-            rm -f "$PID_FILE"
-            echo "$SERVICE_NAME stopped"
-            return 0
+    local count=0
+    while kill -0 "$pid" 2>/dev/null; do
+        if [ $count -ge 30 ]; then
+            echo "Force killing PID $pid..."
+            kill -9 "$pid" 2>/dev/null
+            break
         fi
         sleep 1
+        ((count++))
     done
-
-    echo "Force killing PID $PID"
-    kill -9 "$PID" 2>/dev/null
 
     rm -f "$PID_FILE"
     echo "$SERVICE_NAME stopped"
+    return 0
 }
 
 restart() {
@@ -103,8 +102,8 @@ status() {
         echo "$SERVICE_NAME is running on PID $(cat "$PID_FILE")"
         return 0
     else
-        echo "$SERVICE_NAME is not running"
-        return 1
+        echo "$SERVICE_NAME is stopped"
+        return 3
     fi
 }
 
@@ -127,4 +126,4 @@ case "$1" in
         ;;
 esac
 
-exit 0
+exit $?

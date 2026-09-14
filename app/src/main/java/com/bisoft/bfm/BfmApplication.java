@@ -42,7 +42,8 @@ public class BfmApplication implements CommandLineRunner {
         properties.put("management.endpoint.restart.enabled", Boolean.TRUE);
 		properties.put("management.endpoints.web.exposure.include", "restart");
 		properties.put("logging.pattern.console","%d %-22.22logger{0} : %m%n%wEx");
-		properties.put("logging.file.name","log/app.log");
+		// properties.put("logging.file.name","bfm.log");
+		properties.put("logging.file.name", System.getProperty("user.dir") + "/bfm.log");
 		properties.put("logging.pattern.file","%d : %m%n%wEx");
 		properties.put("logging.file.max-size","10MB");
 		properties.put("logging.file.max-history","5");
