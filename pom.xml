@@ -12,7 +12,7 @@
 	</parent>
 	<groupId>com.bisoft</groupId>
 	<artifactId>bfm</artifactId>
-	<version>3.2.0</version>
+	<version>3.2.0.s4</version>
 	<packaging>pom</packaging>
 	
 	<name>bfm</name>
@@ -27,7 +27,7 @@
 
 	<modules>
 		<module>app</module>
-		<module>rpm</module>
-		<module>deb</module>
+		<!-- <module>rpm</module>
+		<module>deb</module> -->
 	</modules>
 </project>

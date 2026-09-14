@@ -7,6 +7,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.charset.StandardCharsets;
 import java.security.SecureRandom;
 import java.security.cert.X509Certificate;
 import java.time.Duration;
@@ -508,20 +509,97 @@ public class MinipgAccessUtil {
                 String result = (EntityUtils.toString(response1.getEntity()));
                 return result;
             }catch (Exception e){
-                log.error("Error on Stop DB:"+pgServer.getServerAddress());
+                // log.error("Error on Stop DB:"+pgServer.getServerAddress());
                 // log.error(e.getMessage);
-                log.error("Cannot connect minipg on "+pgServer.getServerAddress()+ " for stopPg.");
+                log.error("Cannot connect minipg on "+pgServer.getServerAddress());
             }
 
         } catch (IOException e) {
-            log.error("Error on stop db. Server: "+pgServer.getServerAddress()+" is unreacable");
-            log.error("Cannot connect minipg.Error on Stop DB:"+pgServer.getServerAddress());
-            e.printStackTrace();
+            // log.error("Error on stop db. Server: "+pgServer.getServerAddress()+" is unreacable");
+            log.error("Cannot connect minipg on :"+pgServer.getServerAddress());
+            // e.printStackTrace();
         }
         
         return "OK";
     }
 
+
+    public Integer checkPgProcess(PostgresqlServer pgServer) throws Exception {
+        final String serverAddress = pgServer.getServerAddress().split(":")[0];
+        // final String serverPort = pgServer.getServerAddress().split(":")[1];
+        String minipgUrl = serverUrl.replace("{HOST}",serverAddress);
+        final BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
+
+        SSLConnectionSocketFactory scsf = new SSLConnectionSocketFactory(
+                SSLContexts.custom().loadTrustMaterial(null, new TrustSelfSignedStrategy()).build(),
+                NoopHostnameVerifier.INSTANCE);
+        final HttpClientConnectionManager cm = PoolingHttpClientConnectionManagerBuilder.create()
+                .setSSLSocketFactory(scsf)
+                .build();
+
+        credsProvider.setCredentials(
+                new AuthScope(serverAddress, port),
+                new UsernamePasswordCredentials(username, password.toCharArray()));
+
+        try (CloseableHttpClient httpclient = HttpClients.custom()
+                .setConnectionManager(cm)
+                .setDefaultCredentialsProvider(credsProvider)
+                .build()) {
+
+            HttpGet request = new HttpGet(minipgUrl+"/minipg/checkPgPrc");
+
+            try (CloseableHttpResponse response1 = httpclient.execute(request)) {
+                // HttpEntity entity1 = (HttpEntity) response1.getEntity();
+                String result = (EntityUtils.toString(response1.getEntity()));
+                return Integer.parseInt(result);
+            }catch (Exception e){
+                log.error("Cannot connect minipg on "+pgServer.getServerAddress());
+            }
+
+        } catch (IOException e) {
+            log.error("Cannot connect minipg on :"+pgServer.getServerAddress());
+        }
+        
+        return -1;
+    }
+
+    public Boolean isPGUp(PostgresqlServer pgServer) throws Exception {
+        final String serverAddress = pgServer.getServerAddress().split(":")[0];
+        // final String serverPort = pgServer.getServerAddress().split(":")[1];
+        String minipgUrl = serverUrl.replace("{HOST}",serverAddress);
+        final BasicCredentialsProvider credsProvider = new BasicCredentialsProvider();
+
+        SSLConnectionSocketFactory scsf = new SSLConnectionSocketFactory(
+                SSLContexts.custom().loadTrustMaterial(null, new TrustSelfSignedStrategy()).build(),
+                NoopHostnameVerifier.INSTANCE);
+        final HttpClientConnectionManager cm = PoolingHttpClientConnectionManagerBuilder.create()
+                .setSSLSocketFactory(scsf)
+                .build();
+
+        credsProvider.setCredentials(
+                new AuthScope(serverAddress, port),
+                new UsernamePasswordCredentials(username, password.toCharArray()));
+
+        try (CloseableHttpClient httpclient = HttpClients.custom()
+                .setConnectionManager(cm)
+                .setDefaultCredentialsProvider(credsProvider)
+                .build()) {
+
+            HttpGet request = new HttpGet(minipgUrl+"/minipg/isPGUp");
+
+            try (CloseableHttpResponse response1 = httpclient.execute(request)) {
+                String result = (EntityUtils.toString(response1.getEntity()));
+                return Boolean.parseBoolean(result);
+            }catch (Exception e){
+                log.error("Cannot connect minipg on "+pgServer.getServerAddress());
+            }
+
+        } catch (IOException e) {
+            log.error("Cannot connect minipg on :"+pgServer.getServerAddress());
+        }
+        
+        return false;
+    }
 
     public String stopPg(PostgresqlServer pgServer) throws Exception {
         final String serverAddress = pgServer.getServerAddress().split(":")[0];
@@ -557,13 +635,12 @@ public class MinipgAccessUtil {
                 String result = (EntityUtils.toString(response1.getEntity()));
                 return result;
             }catch (Exception e){
-                log.error("Cannot connect minipg.Error on Stop DB:"+pgServer.getServerAddress());
-                e.printStackTrace();
+                log.error("Cannot connect minipg on:"+pgServer.getServerAddress());
+                // e.printStackTrace();
             }
 
-
         } catch (IOException e) {
-            log.error("Error on stop db. Server: "+pgServer.getServerAddress()+" is unreacable");
+            log.error("Server: "+pgServer.getServerAddress()+" is unreacable");
         }
         
         return "OK";

@@ -341,13 +341,24 @@ public class BfmController {
                     try {
                         PostgresqlServer switchOverToPG = this.bfmContext.getPgList().stream()
                         .filter(s -> (s.getServerAddress().equals(targetPG) 
-                                        && (!s.getStatus().equals(DatabaseStatus.MASTER))
+                                        && (!s.getStatus().equals(DatabaseStatus.PRIMARY))
                                         && (!s.getStatus().equals(DatabaseStatus.INACCESSIBLE)))).findFirst().get();
 
                         if (switchOverToPG == null){
-                            retval = retval + targetPG+ " Server not found in BFM Cluster or It's MASTER or INACCESSIBLE.\n";
+                            retval = retval + targetPG+ " Server not found in BFM Cluster or It's PRIMARY or INACCESSIBLE.\n";
                         } else {
-                            if (switchOverToPG.getReplayLag().equals("0")){
+                            String rawLag = switchOverToPG.getReplayLag();
+                            boolean isZeroLag = Boolean.FALSE;
+
+                            if (rawLag == null) {
+                                isZeroLag = true;
+                            } else {
+                                String lagWithoutMillis = rawLag.split("\\.")[0].trim();
+                                isZeroLag = lagWithoutMillis.equals("00:00:00") || lagWithoutMillis.equals("0");
+                            }
+                            
+                            // if (switchOverToPG.getReplayLag().equals("0")){
+                            if (isZeroLag) {
                                 this.bfmContext.setCheckPaused(Boolean.TRUE);
                                 String ws = this.bfmContext.getWatch_strategy();
                                 Boolean mail_notify = this.bfmContext.isMail_notification_enabled();
@@ -362,7 +373,7 @@ public class BfmController {
                                 // log.info("Prepare for SwitchOver result :" + result);
 
                                 result = minipgAccessUtil.stopPg(old_master);
-                                log.info("Stop old master result :" + result);
+                                log.info("Stop old PRIMARY result :" + result);
 
                                 minipgAccessUtil.vipDown(old_master);
 
@@ -419,7 +430,8 @@ public class BfmController {
                                 
     
                             } else {
-                                retval = retval + " Replay Lag is Not Zero(0) for selected Slave :"+ targetPG+"\n";
+                                log.info("Replay Lag is Not Zero(0) for selected Replica :"+ targetPG);
+                                retval = retval + " Replay Lag is Not Zero(0) for selected Replica :"+ targetPG+"\n";
                             }
                         }
                     } catch (Exception e) {
@@ -451,10 +463,10 @@ public class BfmController {
                     try {
                         PostgresqlServer target_server = this.bfmContext.getPgList().stream()
                         .filter(s -> (s.getServerAddress().equals(targetPG) 
-                                        && (!s.getDatabaseStatus().equals(DatabaseStatus.MASTER)))).findFirst().get();
+                                        && (!s.getDatabaseStatus().equals(DatabaseStatus.PRIMARY)))).findFirst().get();
 
                         if (target_server == null){
-                            retval = retval + targetPG+ " Server not found in BFM Cluster or Its MASTER.\n";
+                            retval = retval + targetPG+ " Server not found in BFM Cluster or Its PRIMARY.\n";
                         } else {
                             try {
                                 this.bfmContext.setCheckPaused(Boolean.TRUE);
@@ -465,17 +477,12 @@ public class BfmController {
                                 this.bfmContext.setMail_notification_enabled(Boolean.FALSE);
 
                                 PostgresqlServer master_server = this.bfmContext.getPgList().stream()
-                                .filter(server -> server.getStatus() == DatabaseStatus.MASTER_WITH_NO_SLAVE || server.getStatus() == DatabaseStatus.MASTER ).findFirst().get();                    
+                                .filter(server -> server.getStatus() == DatabaseStatus.PRIMARY_WITH_NO_REPLICA || server.getStatus() == DatabaseStatus.PRIMARY ).findFirst().get();                    
 
                                 target_server.setRewindStarted(Boolean.TRUE);
                                 List<String> tablespaceList = master_server.getTableSpaceList();
-                                String rewind_result = minipgAccessUtil.rewind(target_server, master_server, tablespaceList);
-                                if (! rewind_result.equals("OK")){
-                                    log.info("pg_rewind was FAILED. starting rejoin with pg_basebackup. Target:",target_server);
-                                    
-                                    String rejoin_result = minipgAccessUtil.rebaseUp(target_server, master_server, tablespaceList);
-                                    log.info("pg_basebackup join cluster result is:"+rejoin_result);
-                                }
+                                String rejoin_result = minipgAccessUtil.rebaseUp(target_server, master_server, tablespaceList);
+                                log.info("pg_basebackup join cluster result is:"+rejoin_result);
                                 target_server.setRewindStarted(Boolean.FALSE);
 
                                 this.bfmContext.setCheckPaused(Boolean.FALSE);
@@ -489,11 +496,11 @@ public class BfmController {
                                 retval = retval +targetPG+" re-initialize Completed Succesfully :\n";
 
                             } catch (Exception e) {
-                                log.warn("No Master server found in cluster...");
+                                log.warn("No Primary server found in cluster...");
                             }
                         }                        
                     } catch (Exception e) {
-                        retval = retval + targetPG+ " Server not found in BFM Cluster or Its not SLAVE.\n";
+                        retval = retval + targetPG+ " Server not found in BFM Cluster or Its not Replica.\n";
                     }     
                 }
         } else {
@@ -561,7 +568,7 @@ public class BfmController {
                     server_rows = server_rows +  "<td>"+formattedDate+"</td>";
                     server_rows = server_rows + "</tr>";
 
-                    if (!pg.getDatabaseStatus().equals(DatabaseStatus.MASTER)) {
+                    if (!pg.getDatabaseStatus().equals(DatabaseStatus.PRIMARY)) {
                         slave_options = slave_options + 
                                         "<option value=\""+pg.getServerAddress()+"\">"+pg.getServerAddress()+"</option>";
                     }
@@ -596,7 +603,7 @@ public class BfmController {
                                     +  "<td>"+pg.getTimeline()+"</td>"
                                     +  "<td>"+pg.getLastCheck()+"</td>"
                                     + "</tr>";
-                    if (!pg.getDatabaseStatus().equals("MASTER")){
+                    if (!pg.getDatabaseStatus().equals("PRIMARY")){
                         slave_options = slave_options + 
                                         "<option value=\""+pg.getAddress()+"\">"+pg.getAddress()+"</option>";
                     }
@@ -665,7 +672,7 @@ public class BfmController {
                     server_rows = server_rows +  "<td>"+formattedDate+"</td>";
                     server_rows = server_rows + "</tr>";
 
-                    if (!pg.getDatabaseStatus().equals(DatabaseStatus.MASTER)) {
+                    if (!pg.getDatabaseStatus().equals(DatabaseStatus.PRIMARY)) {
                         slave_options = slave_options + 
                                         "<option value=\""+pg.getServerAddress()+"\">"+pg.getServerAddress()+"</option>";
                     }
@@ -745,7 +752,7 @@ public class BfmController {
                 server_rows = server_rows + "<tr>";
                 server_rows = server_rows +  "<td>"+pg.getServerAddress()+"</td>";
                 server_rows = server_rows +  "<td>"+pg.getStatus()+"</td>";
-                if (pg.getStatus() == DatabaseStatus.SLAVE){
+                if (pg.getStatus() == DatabaseStatus.REPLICA){
                     server_rows = server_rows +  "<td>";
                     server_rows = server_rows +  "<a href=\"#\" id=\"ah_"+pg.getServerAddress()+"\" class=\"tooltip-test\" title=\"Priority:"+pg.getPriority()+"\">";                    
                     server_rows = server_rows +  "<label class=\"switch-sm\">";
@@ -758,7 +765,7 @@ public class BfmController {
                     server_rows = server_rows +  "<td></td>";
                 }
                 server_rows = server_rows +  "<td>"+pg.getWalLogPosition()+"</td>";
-                server_rows = server_rows +  "<td>"+(pg.getReplayLag() == null ? "0" : pg.getReplayLag())+"</td>";
+                server_rows = server_rows + "<td>" + (pg.getReplayLag() == null ? "0" : pg.getReplayLag().toString().replaceAll("\\.\\d+", "").replaceAll("^00:00:00$", "0")) + "</td>";
                 server_rows = server_rows +  "<td>"+pg.getTimeLineId()+"</td>";
                 String formattedDate = pg.getLastCheckDateTime().format(dateFormatter);
                 server_rows = server_rows +  "<td>"+formattedDate+"</td>";
@@ -766,7 +773,7 @@ public class BfmController {
                 server_rows = server_rows +  "<td>"+(pg.getSyncState() == null ? "" : pg.getSyncState())+"</td>";
                 
 
-                if (pg.getStatus() == DatabaseStatus.SLAVE ){
+                if (pg.getStatus() == DatabaseStatus.REPLICA ){
                     try {
                         String miniPGStatus = minipgAccessUtil.minipgStatus(pg);
                         if ((miniPGStatus == null ? " " : miniPGStatus).equals("OK")
@@ -811,9 +818,9 @@ public class BfmController {
     @RequestMapping(path = "/getSlvRows",method = RequestMethod.GET)
     public @ResponseBody String getSlaveRows(){
         if (this.bfmContext.isMasterBfm() == Boolean.TRUE){            
-            String slave_rows = "<option value=\"\" selected>Select Slave</option>";
+            String slave_rows = "<option value=\"\" selected>Select Replica</option>";
             for(PostgresqlServer pg : this.bfmContext.getPgList()){
-                if (pg.getStatus() == DatabaseStatus.SLAVE || pg.getStatus() == DatabaseStatus.SLAVE_WITH_SLAVE){    
+                if (pg.getStatus() == DatabaseStatus.REPLICA || pg.getStatus() == DatabaseStatus.REPLICA_WITH_REPLICA){    
                     try {
                         String miniPGStatus = minipgAccessUtil.minipgStatus(pg);
                         if ((miniPGStatus == null ? " " : miniPGStatus).equals("OK")){                
@@ -850,7 +857,7 @@ public class BfmController {
         String retval ="";       
         if (this.bfmContext.isMasterBfm() == Boolean.TRUE){
             PostgresqlServer master_server = this.bfmContext.getPgList().stream()
-            .filter(server -> server.getStatus() == DatabaseStatus.MASTER ).findFirst().get();                    
+            .filter(server -> server.getStatus() == DatabaseStatus.PRIMARY ).findFirst().get();                    
             try {
                 String sync_result = minipgAccessUtil.setReplicationToSync(master_server, targetAppName);
                 if (sync_result.equals("OK")){
@@ -875,7 +882,7 @@ public class BfmController {
         String retval ="";       
         if (this.bfmContext.isMasterBfm() == Boolean.TRUE){
             PostgresqlServer master_server = this.bfmContext.getPgList().stream()
-            .filter(server -> server.getStatus() == DatabaseStatus.MASTER ).findFirst().get();                    
+            .filter(server -> server.getStatus() == DatabaseStatus.PRIMARY ).findFirst().get();                    
             try {
                 String async_result = minipgAccessUtil.setReplicationToAsync(master_server, targetAppName);
                 PostgresqlServer oldSyncReplica = this.bfmContext.getPgList().stream().filter(r -> (r.getApplication_name() != null ? r.getApplication_name() :"").equals(targetAppName)).findFirst().get();

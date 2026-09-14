@@ -1,32 +1,24 @@
 {
   "clusterStatus": "HEALTHY",
   "checkPaused": "FALSE",
-  "mailNotifyEnabled": "TRUE",
+  "mailNotifyEnabled": "FALSE",
   "watchStrategy": "availability",
   "clusterServers": [
     {
-      "address": "46.101.246.180:5439",
-      "databaseStatus": "MASTER",
-      "lastCheck": "2025-10-08 20:30:12",
-      "lastWalPos": "D/69000148",
-      "replayLag": "0",
-      "timeline": 120
+      "address": "192.168.56.129:5432",
+      "databaseStatus": "REPLICA",
+      "lastCheck": "2026-08-05 19:30:33",
+      "lastWalPos": "18/FA0007D8",
+      "replayLag": "00:00:00",
+      "timeline": 30
     },
     {
-      "address": "46.101.130.251:5439",
-      "databaseStatus": "SLAVE",
-      "lastCheck": "2025-10-08 20:30:12",
-      "lastWalPos": "D/69000148",
+      "address": "192.168.56.131:5432",
+      "databaseStatus": "PRIMARY",
+      "lastCheck": "2026-08-05 19:30:33",
+      "lastWalPos": "18/FA0006E8",
       "replayLag": "0",
-      "timeline": 120
-    },
-    {
-      "address": "64.226.101.90:5439",
-      "databaseStatus": "SLAVE",
-      "lastCheck": "2025-10-08 20:30:12",
-      "lastWalPos": "D/69000148",
-      "replayLag": "0",
-      "timeline": 120
+      "timeline": 30
     }
   ]
 }

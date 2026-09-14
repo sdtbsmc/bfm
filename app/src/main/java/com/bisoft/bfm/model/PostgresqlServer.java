@@ -49,29 +49,47 @@ public class PostgresqlServer {
     private Boolean isExMaster = Boolean.FALSE;
 
     public DatabaseStatus getStatus(){
+        if (this.databaseStatus == null) {
+            return DatabaseStatus.INACCESSIBLE;
+        }
         return databaseStatus;
     }
 
-    public Connection getServerConnection(){ 
+    public Connection getServerConnection() {
+        int maxRetry = 2;
+        int retryCount = 0;
+
         try {
-            Class.forName("org.postgresql.Driver");
-            if (connection == null || this.databaseStatus == DatabaseStatus.INACCESSIBLE) {
-                connection = DriverManager.getConnection("jdbc:postgresql://" + serverAddress + "/postgres",username,password);
-            } else {
-                connection.close();
-                connection = DriverManager.getConnection("jdbc:postgresql://" + serverAddress + "/postgres",username,password);
-                int retry = 5;
-                while (Objects.isNull(connection) && retry > 0){
-                    retry -= 1;
-                    log.warn("Cant Connect ot server : "+serverAddress+" retrying :"+retry);
-                    connection = DriverManager.getConnection("jdbc:postgresql://" + serverAddress + "/postgres",username,password);
-                }
-            }               
-        } catch (Exception e) {
-            // log.warn("Can't connect to server "+this.getServerAddress());
-            this.databaseStatus = DatabaseStatus.INACCESSIBLE;
+            if (this.connection != null && !this.connection.isClosed() && this.connection.isValid(2)) {
+                return this.connection;
+            }
+        } catch (Exception ignored) {
         }
-        return connection;
+
+        if (this.connection != null) {
+            try { this.connection.close(); } catch (Exception ignored) {}
+            this.connection = null;
+        }
+
+        while (retryCount < maxRetry) {
+            try {
+                Class.forName("org.postgresql.Driver");
+                String url = "jdbc:postgresql://" + serverAddress + "/postgres?connectTimeout=3";
+                this.connection = DriverManager.getConnection(url, username, password);
+                return this.connection;
+            } catch (Exception e) {
+                retryCount++;
+                log.warn("Can't connect to server: " + serverAddress + ", retry " + retryCount + "/" + maxRetry);
+                try {
+                    Thread.sleep(500); 
+                } catch (InterruptedException ignored) {
+                    Thread.currentThread().interrupt();
+                }
+            }
+        }
+
+        this.databaseStatus = DatabaseStatus.INACCESSIBLE;
+        return null;
     }
 
     public Boolean isServerMaster(){
@@ -111,36 +129,31 @@ public class PostgresqlServer {
         return hasSlave;
     }
 
-    public void getWalPosition() throws ClassNotFoundException, SQLException{
-        if (this.databaseStatus.equals(DatabaseStatus.MASTER) || this.databaseStatus.equals(DatabaseStatus.MASTER_WITH_NO_SLAVE)){
-            try {
-                Connection con  = this.getServerConnection();
-                PreparedStatement ps = con.prepareStatement("select pg_current_wal_lsn() as wal_pos");
-                ps.executeQuery();
-                ResultSet rs = ps.getResultSet();
+    public void getWalPosition() {
+        boolean isPrimary = DatabaseStatus.PRIMARY.equals(this.databaseStatus) 
+                        || DatabaseStatus.PRIMARY_WITH_NO_REPLICA.equals(this.databaseStatus);
 
-                rs.next();
+        Connection con = this.getServerConnection();
+        
+        if (con == null) {
+            this.databaseStatus = DatabaseStatus.INACCESSIBLE;
+            return;
+        }
 
-                String wal_pos = rs.getString("wal_pos");
+        String query = isPrimary 
+                ? "SELECT pg_current_wal_lsn() AS wal_pos" 
+                : "SELECT pg_last_wal_replay_lsn() AS wal_pos";
 
-                this.setWalLogPosition(wal_pos);
-            } catch (Exception e) {
-                log.warn("Connection Failed to server:"+this.getServerAddress());
-                this.databaseStatus = DatabaseStatus.INACCESSIBLE;
-            }
-        } else {
-            try {
-                Connection con  = this.getServerConnection();
-                PreparedStatement ps = con.prepareStatement("select pg_last_wal_replay_lsn() as wal_pos");
-                ps.executeQuery();
-                ResultSet rs = ps.getResultSet();
-                rs.next();
+        try (PreparedStatement ps = con.prepareStatement(query);
+            ResultSet rs = ps.executeQuery()) {
+
+            if (rs.next()) {
                 String wal_pos = rs.getString("wal_pos");
                 this.setWalLogPosition(wal_pos);
-            } catch (Exception e) {
-                // log.warn("Connection Failed to server:"+this.getServerAddress());
-                this.databaseStatus = DatabaseStatus.INACCESSIBLE;
             }
+        } catch (Exception e) {
+            log.warn("Failed to execute WAL position query on server: " + this.getServerAddress());
+            this.databaseStatus = DatabaseStatus.INACCESSIBLE;
         }
     }
 
@@ -165,7 +178,7 @@ public class PostgresqlServer {
 
     public Map<String,ArrayList<String>> getReplayLagMap(){
         Map<String,ArrayList<String>> replayLagMap = new HashMap<>();
-        if (this.databaseStatus.equals(DatabaseStatus.MASTER)){
+        if (this.databaseStatus.equals(DatabaseStatus.PRIMARY)){
             try {
                 Connection con  = this.getServerConnection();
                 PreparedStatement ps = con.prepareStatement("select usesuper from pg_user where usename='"+ username +"';");
@@ -248,16 +261,16 @@ public class PostgresqlServer {
                 if (this.isMaster == null && this.hasSlave == null) {
                     this.databaseStatus = DatabaseStatus.INACCESSIBLE;
                 }else if (this.isMaster == true && this.hasSlave == true) {
-                    this.databaseStatus = DatabaseStatus.MASTER;
+                    this.databaseStatus = DatabaseStatus.PRIMARY;
                 }else if (this.isMaster == true && this.hasSlave == false) {
-                    this.databaseStatus = DatabaseStatus.MASTER_WITH_NO_SLAVE;
+                    this.databaseStatus = DatabaseStatus.PRIMARY_WITH_NO_REPLICA;
                 }else if (this.isMaster == false && this.hasSlave == false) {
-                    this.databaseStatus = DatabaseStatus.SLAVE;
+                    this.databaseStatus = DatabaseStatus.REPLICA;
                     // if (this.getHasMasterServer() == Boolean.FALSE){
                     //     this.databaseStatus = DatabaseStatus.INACCESSIBLE;
                     // }
                 }else if(this.isMaster == false && this.hasSlave == true) {
-                    this.databaseStatus = DatabaseStatus.SLAVE_WITH_SLAVE;
+                    this.databaseStatus = DatabaseStatus.REPLICA_WITH_REPLICA;
                 }
             } else {
                 // log.warn("Cant connect to "+ this.getServerAddress());
@@ -288,7 +301,7 @@ public class PostgresqlServer {
                     return result;
                 }
             } else {
-                int updateCount = statement.getUpdateCount();
+                statement.getUpdateCount();
             }
 
         }catch (Exception e){

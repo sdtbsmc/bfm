@@ -24,9 +24,9 @@ class BfmApplicationTests {
 	@BeforeEach
 	public void prepare(){
 		pgList = new ArrayList<>();
-		PostgresqlServer pg1 = PostgresqlServer.builder().serverAddress("1.1.1.1").priority(1).databaseStatus(DatabaseStatus.MASTER).build();
-		PostgresqlServer pg2 = PostgresqlServer.builder().serverAddress("1.1.1.2").priority(1).databaseStatus(DatabaseStatus.SLAVE).build();
-		PostgresqlServer pg3 = PostgresqlServer.builder().serverAddress("1.1.1.3").priority(1).databaseStatus(DatabaseStatus.SLAVE).build();
+		PostgresqlServer pg1 = PostgresqlServer.builder().serverAddress("1.1.1.1").priority(1).databaseStatus(DatabaseStatus.PRIMARY).build();
+		PostgresqlServer pg2 = PostgresqlServer.builder().serverAddress("1.1.1.2").priority(1).databaseStatus(DatabaseStatus.REPLICA).build();
+		PostgresqlServer pg3 = PostgresqlServer.builder().serverAddress("1.1.1.3").priority(1).databaseStatus(DatabaseStatus.REPLICA).build();
 		pgList.add(pg1);
 		pgList.add(pg2);
 		pgList.add(pg3);
