@@ -1,20 +1,24 @@
 [Unit]
-Description="BFM Service"
-Wants=network-online.target 
-After=network-online.target
+Description=BFM Service
+After=network.target
 
 [Service]
 Type=forking
-WorkingDirectory=/etc/bfm/bfmwatcher
+
 User=postgres
 Group=postgres
+WorkingDirectory=/etc/bfm/bfmwatcher
+
+# Shell script'inin oluşturduğu PID dosyasını Systemd'ye bildiriyoruz
+PIDFile=/etc/bfm/bfmwatcher/bfm.pid
 
 ExecStart=/etc/bfm/bfmwatcher/bfm.sh start
 ExecStop=/etc/bfm/bfmwatcher/bfm.sh stop
-ExecReload=/etc/bfm/bfmwatcher/bfm.sh reload
+ExecReload=/etc/bfm/bfmwatcher/bfm.sh restart
 
-Restart=always
+# Uygulama çökerse veya beklenmedik şekilde durursa yeniden başlat
+Restart=on-failure
+RestartSec=5s
 
 [Install]
-WantedBy=sysinit.target
-Alias=bfm.service
+WantedBy=multi-user.target
