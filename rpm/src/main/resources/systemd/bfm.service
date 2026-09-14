@@ -1,23 +1,24 @@
 [Unit]
- Description = BFM Service
- After=network.target
+Description=BFM Service
+After=network.target
+
 [Service]
- Type=forking
- User=root
- Group=root
- WorkingDirectory=/root
- WorkingDirectory=/etc/bfm/bfmwatcher
+Type=forking
 
- #ExecStartPre=/usr/bin/sh  /root/.bash_profile
- ExecStart = /etc/bfm/bfmwatcher/bfm.sh start
- ExecStop = /etc/bfm/bfmwatcher/bfm.sh stop
- ExecReload = /etc/bfm/bfmwatcher/bfm.sh reload
+User=postgres
+Group=postgres
+WorkingDirectory=/etc/bfm/bfmwatcher
 
- # whenever watcher service is down it will be restarted again ...if you don't this behavior you can # this line..
- Restart=always
+# Shell script'inin oluşturduğu PID dosyasını Systemd'ye bildiriyoruz
+PIDFile=/etc/bfm/bfmwatcher/bfm.pid
 
+ExecStart=/etc/bfm/bfmwatcher/bfm.sh start
+ExecStop=/etc/bfm/bfmwatcher/bfm.sh stop
+ExecReload=/etc/bfm/bfmwatcher/bfm.sh restart
+
+# Uygulama çökerse veya beklenmedik şekilde durursa yeniden başlat
+Restart=on-failure
+RestartSec=5s
 
 [Install]
- WantedBy=multi-user.target
-
-
+WantedBy=multi-user.target
