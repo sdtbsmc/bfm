@@ -710,7 +710,7 @@ public class BfmController {
         if (this.bfmContext.isMasterBfm() == Boolean.TRUE){
             
             try {
-                return String.join("\n", getLastNLinesFromFile("log/app.log",10));
+                return String.join("\n", getLastNLinesFromFile("bfm.log",10));
             } catch (IOException e) {
                 e.printStackTrace();
                 return "BFM Cluster Manager.";
